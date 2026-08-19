@@ -28,3 +28,9 @@ V1 learned long Localized Narratives phrasing, including repeated “In this ima
 4. Compare automatic metrics, mean quality score, hallucination rate, template-prefix frequency, and truncated-output count against V1.
 
 Automatic metrics may move differently from human usefulness because concise captions intentionally differ from verbose narrative references. Report both.
+
+## Completed V2 review
+
+The 40-image single-reviewer audit is complete. V2's mean caption-quality rating was **3.525 / 5** with **2 / 40 (5%)** factual-hallucination flags. The comparable V1 audit recorded **2.825 / 5** and **11 / 40 (27.5%)** respectively. V2 also reduced known narration-template prefixes from 40 to 3 in this sample.
+
+This indicates an improvement in human-rated usefulness despite lower overlap metrics against verbose source references. The review remains a convenience sample rather than a multi-rater study.
