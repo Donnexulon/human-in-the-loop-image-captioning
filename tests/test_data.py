@@ -3,7 +3,12 @@ import json
 import pytest
 from PIL import Image
 
-from caption_review.data import deterministic_split, load_annotations, prepare_dataset
+from caption_review.data import (
+    deterministic_split,
+    load_annotations,
+    prepare_dataset,
+    training_caption,
+)
 from caption_review.openimages import _captions_by_image, _metadata_by_image
 
 
@@ -23,6 +28,16 @@ def test_annotations_reject_missing_images(tmp_path) -> None:
         load_annotations(annotations, tmp_path / "images")
 
 
+def test_concise_caption_removes_leading_narration_and_background_sentences() -> None:
+    caption = "In this image, we can see a blue bird on a rail. In the background, we can see trees."
+    assert training_caption(caption, "concise") == "A blue bird on a rail"
+    assert training_caption("In this picture I can observe a dog on the floor.", "concise") == "A dog on the floor"
+    assert training_caption("This image consists of a painting.", "concise") == "A painting"
+    assert training_caption(caption, "original") == caption
+    with pytest.raises(ValueError, match="Unsupported caption mode"):
+        training_caption(caption, "unknown")
+
+
 def test_preparation_writes_disjoint_metadata_and_references(tmp_path) -> None:
     images = tmp_path / "images"
     images.mkdir()
@@ -30,7 +45,13 @@ def test_preparation_writes_disjoint_metadata_and_references(tmp_path) -> None:
     for index in range(20):
         name = f"sample-{index}.png"
         Image.new("RGB", (4, 4), "white").save(images / name)
-        rows.append({"id": str(index), "image": name, "captions": [f"caption {index}", "alternate"]})
+        rows.append(
+            {
+                "id": str(index),
+                "image": name,
+                "captions": [f"In this image, we can see caption {index}.", "alternate"],
+            }
+        )
     annotations = tmp_path / "annotations.jsonl"
     annotations.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
     output = tmp_path / "prepared"
@@ -42,6 +63,9 @@ def test_preparation_writes_disjoint_metadata_and_references(tmp_path) -> None:
         assert len(metadata) == len(references) == counts[split]
         identifiers.extend(item["id"] for item in references)
     assert sorted(identifiers, key=int) == [str(index) for index in range(20)]
+    prepare_dataset(annotations, images, output, seed=42, caption_mode="concise", refresh_labels=True)
+    refreshed = [json.loads(line) for line in (output / "train" / "metadata.jsonl").read_text().splitlines()]
+    assert all(not item["text"].lower().startswith("in this image") for item in refreshed)
 
 
 def test_openimages_parsers_keep_caption_references_and_metadata(tmp_path) -> None:

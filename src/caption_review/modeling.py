@@ -52,6 +52,7 @@ def train_model(
     learning_rate: float = 5e-5,
     max_length: int = 64,
     seed: int = 42,
+    freeze_vision_encoder: bool = False,
 ) -> Path:
     import torch
     from torch.utils.data import DataLoader
@@ -63,6 +64,9 @@ def train_model(
     dataset = _load_split(data_dir)
     processor = BlipProcessor.from_pretrained(model_name)
     model = BlipForConditionalGeneration.from_pretrained(model_name).to(device)
+    if freeze_vision_encoder:
+        for parameter in model.vision_model.parameters():
+            parameter.requires_grad = False
     loader = DataLoader(
         dataset,
         batch_size=batch_size,
@@ -92,6 +96,7 @@ def train_model(
                 "batch_size": batch_size,
                 "learning_rate": learning_rate,
                 "seed": seed,
+                "freeze_vision_encoder": freeze_vision_encoder,
                 "train_data": str(data_dir),
             },
             indent=2,
@@ -101,7 +106,14 @@ def train_model(
     return output
 
 
-def generate_caption(model_path: str | Path, image_path: Path, max_new_tokens: int = 40) -> str:
+def generate_caption(
+    model_path: str | Path,
+    image_path: Path,
+    max_new_tokens: int = 40,
+    num_beams: int = 1,
+    no_repeat_ngram_size: int = 0,
+    repetition_penalty: float = 1.0,
+) -> str:
     import torch
     from PIL import Image
     from transformers import BlipForConditionalGeneration, BlipProcessor
@@ -111,8 +123,16 @@ def generate_caption(model_path: str | Path, image_path: Path, max_new_tokens: i
     model = BlipForConditionalGeneration.from_pretrained(model_path).to(device)
     image = Image.open(image_path).convert("RGB")
     inputs = processor(images=image, return_tensors="pt").to(device)
+    generation_args: dict[str, int | float | bool] = {"max_new_tokens": max_new_tokens}
+    if num_beams > 1:
+        generation_args["num_beams"] = num_beams
+        generation_args["early_stopping"] = True
+    if no_repeat_ngram_size > 0:
+        generation_args["no_repeat_ngram_size"] = no_repeat_ngram_size
+    if repetition_penalty != 1.0:
+        generation_args["repetition_penalty"] = repetition_penalty
     with torch.inference_mode():
-        output = model.generate(**inputs, max_new_tokens=max_new_tokens)
+        output = model.generate(**inputs, **generation_args)
     return processor.decode(output[0], skip_special_tokens=True).strip()
 
 
@@ -120,7 +140,14 @@ def _read_references(data_dir: Path) -> list[dict[str, object]]:
     return [json.loads(line) for line in (data_dir / "references.jsonl").read_text(encoding="utf-8").splitlines() if line]
 
 
-def evaluate_model(model_path: str | Path, data_dir: Path) -> dict[str, object]:
+def evaluate_model(
+    model_path: str | Path,
+    data_dir: Path,
+    max_new_tokens: int = 40,
+    num_beams: int = 1,
+    no_repeat_ngram_size: int = 0,
+    repetition_penalty: float = 1.0,
+) -> dict[str, object]:
     from nltk.translate.meteor_score import meteor_score
     from pycocoevalcap.cider.cider import Cider
     from rouge_score import rouge_scorer
@@ -133,7 +160,14 @@ def evaluate_model(model_path: str | Path, data_dir: Path) -> dict[str, object]:
     cider_hypotheses: dict[str, list[str]] = {}
     for index, item in enumerate(references, start=1):
         file_name = str(item["file_name"])
-        prediction = generate_caption(model_path, data_dir / file_name)
+        prediction = generate_caption(
+            model_path,
+            data_dir / file_name,
+            max_new_tokens=max_new_tokens,
+            num_beams=num_beams,
+            no_repeat_ngram_size=no_repeat_ngram_size,
+            repetition_penalty=repetition_penalty,
+        )
         item_references = [str(reference) for reference in item["references"]]
         predictions.append(prediction)
         reference_texts.append(item_references)
