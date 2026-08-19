@@ -1,0 +1,50 @@
+{
+  "status": "verified",
+  "dataset": {
+    "annotation_sha256": "6e19c2ba0db8c40fdc4f6cf7515e08af8c1674aa8406ed425ce6755d2fdde23a",
+    "seed": 42,
+    "split_counts": {
+      "train": 2392,
+      "val": 302,
+      "test": 306
+    },
+    "source_annotations": "data\\raw\\openimages-v6-sample\\annotations.jsonl"
+  },
+  "evaluation": {
+    "fine_tuned": {
+      "image_count": 306,
+      "bleu_4": 0.10262714514670257,
+      "rouge_l": 0.42616372294587834,
+      "meteor": 0.33928231099192674,
+      "cider": 0.35877873473257804
+    },
+    "split": "locked test",
+    "base": {
+      "image_count": 306,
+      "bleu_4": 0.00287897858196048,
+      "rouge_l": 0.1570017017543768,
+      "meteor": 0.07834401250690422,
+      "cider": 0.09696485019898257
+    }
+  },
+  "human_review": {
+    "sample_size": 40,
+    "sample_description": "Single-reviewer convenience sample from the locked test split, reviewed in deterministic app order.",
+    "rating_scale": "1=mostly wrong or misleading; 5=fully accurate, natural, and useful",
+    "mean_quality_rating": 2.825,
+    "rating_distribution": {
+      "1": 0,
+      "2": 15,
+      "3": 17,
+      "4": 8,
+      "5": 0
+    },
+    "factual_hallucination_count": 11,
+    "factual_hallucination_rate": 0.275,
+    "corrected_caption_count": 38,
+    "template_prefix_count": 40,
+    "truncated_output_count": 4,
+    "source": "reviews/feedback.sqlite"
+  },
+  "notes": "Automatic metrics use the locked test split. The human review is a single-reviewer convenience sample and is not a universal quality claim."
+}
