@@ -77,3 +77,20 @@ See [the evaluation protocol](docs/EVALUATION_PROTOCOL.md) and [`results/release
 The repository contains code, tests, configuration, and the checked-in release report. Raw images, annotations, checkpoints, and reviewer databases are intentionally excluded. Attach `checkpoints/blip-captioner-v1` as a release asset if you distribute trained weights, subject to the [BLIP model terms](https://huggingface.co/Salesforce/blip-image-captioning-base).
 
 See [`docs/V1_RELEASE.md`](docs/V1_RELEASE.md) for the exact V1 configuration and known limitations. Source code is available under the [MIT License](LICENSE); the source data and model weights have their own licenses.
+
+## V2 experiment
+
+V2 is intentionally separate from the V1 release. It creates concise training labels from the same source manifest, starts again from base BLIP, freezes the vision encoder, and uses repetition-aware decoding. It does **not** train on V1 reviewer corrections because those originate from locked test images.
+
+```powershell
+# Same image split; concise labels are used only as training targets.
+caption-review prepare-data --annotations data\raw\openimages-v6-sample\annotations.jsonl --images data\raw\openimages-v6-sample\images --output data\prepared-v2 --caption-mode concise
+
+# V2 starts from base BLIP with a conservative fine-tuning configuration.
+caption-review train --data data\prepared-v2\train --output checkpoints\blip-captioner-v2 --epochs 2 --batch-size 4 --learning-rate 1e-5 --freeze-vision-encoder
+
+# Keep V2 results separate and evaluate both models with the same V2 decoding settings.
+caption-review evaluate --model checkpoints\blip-captioner-v2 --baseline-model Salesforce/blip-image-captioning-base --data data\prepared-v2\test --report results\release-v2.json --max-new-tokens 30 --num-beams 3 --no-repeat-ngram-size 3 --repetition-penalty 1.1
+```
+
+The full hypothesis and human-review comparison protocol are in [`docs/V2_EXPERIMENT.md`](docs/V2_EXPERIMENT.md).

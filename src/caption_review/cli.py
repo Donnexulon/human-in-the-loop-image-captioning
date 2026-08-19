@@ -13,7 +13,14 @@ from .review import launch_review_app
 
 
 def prepare_data(args: argparse.Namespace) -> int:
-    result = prepare_dataset(Path(args.annotations), Path(args.images), Path(args.output), args.seed)
+    result = prepare_dataset(
+        Path(args.annotations),
+        Path(args.images),
+        Path(args.output),
+        args.seed,
+        args.caption_mode,
+        args.refresh_labels,
+    )
     print(json.dumps(result, indent=2))
     return 0
 
@@ -41,6 +48,7 @@ def train(args: argparse.Namespace) -> int:
         args.learning_rate,
         args.max_length,
         args.seed,
+        args.freeze_vision_encoder,
     )
     print(f"Saved checkpoint to {target}")
     return 0
@@ -48,17 +56,24 @@ def train(args: argparse.Namespace) -> int:
 
 def evaluate(args: argparse.Namespace) -> int:
     data_dir = Path(args.data)
-    metrics = evaluate_model(args.model, data_dir)
+    generation = {
+        "max_new_tokens": args.max_new_tokens,
+        "num_beams": args.num_beams,
+        "no_repeat_ngram_size": args.no_repeat_ngram_size,
+        "repetition_penalty": args.repetition_penalty,
+    }
+    metrics = evaluate_model(args.model, data_dir, **generation)
     report_path = Path(args.report)
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report = json.loads(report_path.read_text(encoding="utf-8")) if report_path.exists() else {}
     report["status"] = "verified"
     report["evaluation"] = {"fine_tuned": metrics, "split": "locked test"}
+    report["generation"] = generation
     metadata_path = data_dir.parent / "release-metadata.json"
     if metadata_path.is_file():
         report["dataset"] = json.loads(metadata_path.read_text(encoding="utf-8"))
     if args.baseline_model:
-        report["evaluation"]["base"] = evaluate_model(args.baseline_model, data_dir)
+        report["evaluation"]["base"] = evaluate_model(args.baseline_model, data_dir, **generation)
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(json.dumps(report["evaluation"], indent=2))
     print(f"Wrote evaluation report: {report_path}")
@@ -66,12 +81,31 @@ def evaluate(args: argparse.Namespace) -> int:
 
 
 def caption_image(args: argparse.Namespace) -> int:
-    print(generate_caption(args.model, Path(args.image), args.max_new_tokens))
+    print(
+        generate_caption(
+            args.model,
+            Path(args.image),
+            args.max_new_tokens,
+            args.num_beams,
+            args.no_repeat_ngram_size,
+            args.repetition_penalty,
+        )
+    )
     return 0
 
 
 def app(args: argparse.Namespace) -> int:
-    launch_review_app(args.model, Path(args.data), Path(args.reviews), args.host, args.port)
+    launch_review_app(
+        args.model,
+        Path(args.data),
+        Path(args.reviews),
+        args.host,
+        args.port,
+        args.max_new_tokens,
+        args.num_beams,
+        args.no_repeat_ngram_size,
+        args.repetition_penalty,
+    )
     return 0
 
 
@@ -93,6 +127,8 @@ def build_parser() -> argparse.ArgumentParser:
     prepare.add_argument("--images", required=True)
     prepare.add_argument("--output", default="data/prepared-v1")
     prepare.add_argument("--seed", type=int, default=42)
+    prepare.add_argument("--caption-mode", choices=["original", "concise"], default="original")
+    prepare.add_argument("--refresh-labels", action="store_true")
     prepare.set_defaults(func=prepare_data)
 
     fit = commands.add_parser("train")
@@ -104,6 +140,7 @@ def build_parser() -> argparse.ArgumentParser:
     fit.add_argument("--learning-rate", type=float, default=5e-5)
     fit.add_argument("--max-length", type=int, default=64)
     fit.add_argument("--seed", type=int, default=42)
+    fit.add_argument("--freeze-vision-encoder", action="store_true")
     fit.set_defaults(func=train)
 
     score = commands.add_parser("evaluate")
@@ -111,12 +148,13 @@ def build_parser() -> argparse.ArgumentParser:
     score.add_argument("--baseline-model", help="Optional base model for a matched comparison.")
     score.add_argument("--data", default="data/prepared-v1/test")
     score.add_argument("--report", default="results/release.json")
+    _add_generation_args(score)
     score.set_defaults(func=evaluate)
 
     caption = commands.add_parser("caption")
     caption.add_argument("--model", required=True)
     caption.add_argument("--image", required=True)
-    caption.add_argument("--max-new-tokens", type=int, default=40)
+    _add_generation_args(caption)
     caption.set_defaults(func=caption_image)
 
     reviewer = commands.add_parser("app")
@@ -125,8 +163,16 @@ def build_parser() -> argparse.ArgumentParser:
     reviewer.add_argument("--reviews", default="reviews/feedback.sqlite")
     reviewer.add_argument("--host", default="127.0.0.1")
     reviewer.add_argument("--port", type=int, default=7860)
+    _add_generation_args(reviewer)
     reviewer.set_defaults(func=app)
     return parser
+
+
+def _add_generation_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--max-new-tokens", type=int, default=40)
+    parser.add_argument("--num-beams", type=int, default=1)
+    parser.add_argument("--no-repeat-ngram-size", type=int, default=0)
+    parser.add_argument("--repetition-penalty", type=float, default=1.0)
 
 
 def main() -> int:

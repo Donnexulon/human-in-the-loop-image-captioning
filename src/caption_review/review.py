@@ -67,7 +67,17 @@ def _load_samples(data_dir: Path) -> list[dict[str, object]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
 
 
-def launch_review_app(model: str, data_dir: Path, database: Path, host: str, port: int) -> None:
+def launch_review_app(
+    model: str,
+    data_dir: Path,
+    database: Path,
+    host: str,
+    port: int,
+    max_new_tokens: int = 40,
+    num_beams: int = 1,
+    no_repeat_ngram_size: int = 0,
+    repetition_penalty: float = 1.0,
+) -> None:
     import gradio as gr
 
     samples = _load_samples(data_dir)
@@ -78,7 +88,14 @@ def launch_review_app(model: str, data_dir: Path, database: Path, host: str, por
     def load(index: int):
         sample = samples[index % len(samples)]
         image_path = data_dir / str(sample["file_name"])
-        caption = generate_caption(model, image_path)
+        caption = generate_caption(
+            model,
+            image_path,
+            max_new_tokens=max_new_tokens,
+            num_beams=num_beams,
+            no_repeat_ngram_size=no_repeat_ngram_size,
+            repetition_penalty=repetition_penalty,
+        )
         progress = f"Image {index % len(samples) + 1} of {len(samples)}"
         return image_path, caption, "", 3, False, progress, index % len(samples)
 
